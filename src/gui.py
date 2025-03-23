@@ -29,6 +29,7 @@ class DeadlockDetectionGUI:
         self.mode_switch.pack(pady=20)
 
     def toggle_mode(self):
+        """Toggle between dark and light mode."""
         if self.is_dark_mode:
             self.root.configure(bg="white")
             self.title_label.config(bg="white", fg="black")
@@ -39,31 +40,55 @@ class DeadlockDetectionGUI:
             self.is_dark_mode = True
 
     def open_single_instance(self):
-        # Open a new window for Single-Instance Detection
+        """Open a new window for Single-Instance Detection."""
         single_window = tk.Toplevel(self.root)
-        single_window.title("Single-Instance Deadlock Detection")
-        single_window.geometry("400x300")
+        single_window.title("Single-Instance Resource Detection")
+        single_window.geometry("500x400")
 
-        label = tk.Label(single_window, text="Single-Instance Detection Page", font=("Arial", 14, "bold"))
-        label.pack(pady=20)
+        # Input Fields
+        tk.Label(single_window, text="Enter number of processes:", font=("Arial", 12)).pack(pady=5)
+        process_entry = tk.Entry(single_window)
+        process_entry.pack(pady=5)
 
-        close_button = tk.Button(single_window, text="Close", command=single_window.destroy)
-        close_button.pack(pady=10)
+        tk.Label(single_window, text="Enter number of resources:", font=("Arial", 12)).pack(pady=5)
+        resource_entry = tk.Entry(single_window)
+        resource_entry.pack(pady=5)
+
+        # Submit Button
+        submit_button = tk.Button(single_window, text="Generate Canvas", font=("Arial", 12),
+                                  command=lambda: self.generate_canvas(single_window, process_entry, resource_entry))
+        submit_button.pack(pady=10)
+
+    def generate_canvas(self, window, process_entry, resource_entry):
+        """Generate a canvas with emojis representing processes and resources."""
+        try:
+            num_processes = int(process_entry.get())
+            num_resources = int(resource_entry.get())
+        except ValueError:
+            return  # Ignore invalid inputs
+
+        # Create Canvas
+        canvas = tk.Canvas(window, width=400, height=250, bg="lightgray")
+        canvas.pack(pady=10)
+
+        # Display Processes as Emojis
+        process_emoji = "🤖"
+        resource_emoji = "🖥️"
+        
+        for i in range(num_processes):
+            canvas.create_text(50 + i * 80, 50, text=f"P{i+1} {process_emoji}", font=("Arial", 14))
+
+        for i in range(num_resources):
+            canvas.create_text(50 + i * 80, 150, text=f"R{i+1} {resource_emoji}", font=("Arial", 14))
 
     def open_multi_instance(self):
-        # Open a new window for Multi-Instance Detection
-        multi_window = tk.Toplevel(self.root)
-        multi_window.title("Multi-Instance Deadlock Detection")
-        multi_window.geometry("400x300")
-
-        label = tk.Label(multi_window, text="Multi-Instance Detection Page", font=("Arial", 14, "bold"))
-        label.pack(pady=20)
-
-        close_button = tk.Button(multi_window, text="Close", command=multi_window.destroy)
-        close_button.pack(pady=10)
+        print("Opening Multi-Instance Resource Detection...")
+        # TODO: Implement navigation to Multi-Instance Detection Page
 
 # Run the GUI
 if __name__ == "__main__":
     root = tk.Tk()
     app = DeadlockDetectionGUI(root)
     root.mainloop()
+
+
