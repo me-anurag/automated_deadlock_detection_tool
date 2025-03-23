@@ -411,7 +411,7 @@ class DeadlockDetectionGUI:
         # Display allocations
         for process, resources in self.allocations.items():
             for resource in resources:
-                text = f"{self.process_emoji} <------- {self.resource_emoji} ({process} -> {resource})"
+                text = f"{self.process_emoji} <------- {self.resource_emoji} ({process} <- {resource})"
                 label = tk.Label(self.left_inner_frame, text=text, font=("Arial", 10), bg="lightgray")
                 label.pack(anchor="center", pady=5)
                 self.allocation_displays.append(label)
