@@ -1,12 +1,24 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+import pygame  # Import pygame for sound effects
 
 class DeadlockDetectionGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Automated Deadlock Detection Tool")
         self.root.geometry("500x300")
+
+        # Initialize pygame mixer for sound effects
+        pygame.mixer.init()
+        # Load sound effects (make sure these files exist in your directory)
+        try:
+            self.allocate_sound = pygame.mixer.Sound("allocate_sound.wav")
+            self.request_sound = pygame.mixer.Sound("request_sound.wav")
+        except pygame.error as e:
+            print(f"Error loading sound files: {e}")
+            self.allocate_sound = None
+            self.request_sound = None
 
         # Background Mode
         self.is_dark_mode = False
@@ -319,6 +331,9 @@ class DeadlockDetectionGUI:
             # Update allocation
             self.allocations[target_process].append(resource)
             self.action_history.append(("allocation", target_process, resource))
+            # Play the allocation sound if available
+            if self.allocate_sound:
+                self.allocate_sound.play()
             # Remove the resource icon from the center canvas
             self.canvas.delete(self.resource_objects[resource])
             self.center_items.remove(self.resource_objects[resource])
@@ -357,6 +372,9 @@ class DeadlockDetectionGUI:
             # Update request
             self.requests[process].append(target_resource)
             self.action_history.append(("request", process, target_resource))
+            # Play the request sound if available
+            if self.request_sound:
+                self.request_sound.play()
             # Remove the process icon from the center canvas
             self.canvas.delete(self.process_objects[process])
             self.center_items.remove(self.process_objects[process])
@@ -390,19 +408,16 @@ class DeadlockDetectionGUI:
             widget.destroy()
         self.allocation_displays = []
 
-        # Debug: Print the current allocations
-        print("Displaying allocations:", self.allocations)
-
         # Display allocations
         for process, resources in self.allocations.items():
             for resource in resources:
                 text = f"{self.process_emoji} <------- {self.resource_emoji} ({process} -> {resource})"
                 label = tk.Label(self.left_inner_frame, text=text, font=("Arial", 10), bg="lightgray")
-                label.pack(anchor="center", pady=5)  # Use pack instead of place
+                label.pack(anchor="center", pady=5)
                 self.allocation_displays.append(label)
 
         # Update the scroll region to include all labels
-        self.left_inner_frame.update_idletasks()  # Ensure the frame is updated
+        self.left_inner_frame.update_idletasks()
         self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
 
     def display_requests(self):
@@ -412,19 +427,16 @@ class DeadlockDetectionGUI:
             widget.destroy()
         self.request_displays = []
 
-        # Debug: Print the current requests
-        print("Displaying requests:", self.requests)
-
         # Display requests
         for process, resources in self.requests.items():
             for resource in resources:
                 text = f"{self.process_emoji} -------> {self.resource_emoji} ({process} -> {resource})"
                 label = tk.Label(self.right_inner_frame, text=text, font=("Arial", 10), bg="lightgray")
-                label.pack(anchor="center", pady=5)  # Use pack instead of place
+                label.pack(anchor="center", pady=5)
                 self.request_displays.append(label)
 
         # Update the scroll region to include all labels
-        self.right_inner_frame.update_idletasks()  # Ensure the frame is updated
+        self.right_inner_frame.update_idletasks()
         self.right_canvas.configure(scrollregion=self.right_canvas.bbox("all"))
 
     def undo_action(self):
