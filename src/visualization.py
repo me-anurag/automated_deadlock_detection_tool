@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
-import networkx as nx  # Add this import
+import networkx as nx
 from matplotlib.patches import Rectangle
 from matplotlib.lines import Line2D
 import numpy as np
 
-def compute_safe_sequence(processes, resources_held, resources_wanted):
+def compute_safe_sequence(processes, resources_held, resources_wanted, total_resources):
     """
     Computes a safe execution sequence using a simplified Banker's Algorithm.
     
@@ -12,15 +12,19 @@ def compute_safe_sequence(processes, resources_held, resources_wanted):
         processes (list): List of process names (e.g., ['P1', 'P2', ...]).
         resources_held (dict): Mapping of processes to held resources.
         resources_wanted (dict): Mapping of processes to requested resources.
+        total_resources (int): Total number of resources in the system.
     
     Returns:
         list: A safe execution sequence, or None if no safe sequence exists.
     """
+    # Calculate currently held resources
     held_resources = set()
     for proc in resources_held:
         held_resources.update(resources_held[proc])
     
-    available = set([f"R{i+1}" for i in range(len(held_resources)) if f"R{i+1}" not in held_resources])
+    # Initialize available resources (all resources not currently held)
+    all_resources = {f"R{i+1}" for i in range(total_resources)}
+    available = all_resources - held_resources
     finish = {proc: False for proc in processes}
     safe_sequence = []
 
@@ -28,6 +32,7 @@ def compute_safe_sequence(processes, resources_held, resources_wanted):
         found = False
         for proc in processes:
             if not finish[proc]:
+                # Check if all requested resources are either available or already held
                 can_run = True
                 for res in resources_wanted[proc]:
                     if res not in available and res not in resources_held[proc]:
@@ -35,11 +40,12 @@ def compute_safe_sequence(processes, resources_held, resources_wanted):
                         break
                 if can_run:
                     safe_sequence.append(proc)
-                    available.update(resources_held[proc])
+                    available.update(resources_held[proc])  # Release held resources
                     finish[proc] = True
                     found = True
+                    break  # Move to next iteration after finding one
         if not found:
-            return None
+            return None  # No process can run, indicating potential deadlock or unsafe state
     return safe_sequence
 
 def build_wait_for_graph(resources_held, resources_wanted):
@@ -94,7 +100,7 @@ def convert_deadlock_cycle_to_wfg(deadlock_cycle, resources_held, resources_want
 
 def get_deadlock_details(deadlock_cycle, resources_held, resources_wanted):
     """
-    Generates a detailed description of the deadlock cycle, including processes and resources involved.
+    Generates a detailed description of the deadlock cycle.
     
     Args:
         deadlock_cycle (list): The deadlock cycle from the RAG.
@@ -112,7 +118,6 @@ def get_deadlock_details(deadlock_cycle, resources_held, resources_wanted):
     for i in range(len(process_cycle)):
         p1 = process_cycle[i]
         p2 = process_cycle[(i + 1) % len(process_cycle)]
-        # Find the resource that p1 is waiting for, which p2 holds
         for res in resources_wanted[p1]:
             if res in resources_held[p2]:
                 detail = f"{p1} holds {resources_held[p1]} and requests {res}, which is held by {p2}"
@@ -120,16 +125,33 @@ def get_deadlock_details(deadlock_cycle, resources_held, resources_wanted):
                 break
     return details
 
-def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
+def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None, total_resources=None):
     """
-    Visualizes the Resource Allocation Graph (RAG) and Wait-For Graph (WFG) side by side with enhanced clarity.
+    Visualizes the Resource Allocation Graph (RAG) and Wait-For Graph (WFG) side by side.
     
     Args:
         rag (dict): The Resource Allocation Graph as an adjacency list.
         resources_held (dict): Mapping of processes to held resources.
         resources_wanted (dict): Mapping of processes to requested resources.
         deadlock_cycle (list, optional): List of nodes forming a deadlock cycle in the RAG.
+        total_resources (int, optional): Total number of resources in the system.
     """
+    # Infer total_resources if not provided
+    if total_resources is None:
+        all_res = set()
+        for res_list in resources_held.values():
+            all_res.update(res_list)
+        for res_list in resources_wanted.values():
+            all_res.update(res_list)
+        total_resources = max([int(r[1:]) for r in all_res]) if all_res else 0
+
+    # Debug output
+    print(f"RAG: {rag}")
+    print(f"Resources Held: {resources_held}")
+    print(f"Resources Wanted: {resources_wanted}")
+    print(f"Deadlock Cycle: {deadlock_cycle}")
+    print(f"Total Resources: {total_resources}")
+
     # Create RAG
     G_rag = nx.DiGraph()
     for node in rag:
@@ -145,7 +167,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
         for neighbor in wfg[node]:
             G_wfg.add_edge(node, neighbor)
 
-    # Convert RAG deadlock cycle to WFG deadlock cycle (processes only)
+    # Convert RAG deadlock cycle to WFG deadlock cycle
     wfg_deadlock_cycle = convert_deadlock_cycle_to_wfg(deadlock_cycle, resources_held, resources_wanted)
 
     # Get detailed deadlock information
@@ -155,20 +177,19 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
     processes = [n for n in G_rag.nodes if n.startswith("P")]
     resources = [n for n in G_rag.nodes if n.startswith("R")]
 
-    # Create a figure with two subplots
+    # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8), gridspec_kw={'wspace': 0.4})
 
-    # Set a light background for subplots with subtle gridlines
+    # Set background and grid
     ax1.set_facecolor('#f8f9fa')
     ax2.set_facecolor('#f8f9fa')
     ax1.grid(True, linestyle='--', alpha=0.3, zorder=0)
     ax2.grid(True, linestyle='--', alpha=0.3, zorder=0)
 
     # --- RAG (Left Subplot) ---
-    # Use a bipartite layout with increased scale for better spacing
     pos_rag = nx.bipartite_layout(G_rag, processes, align='horizontal', scale=2.0, center=(0, 0))
 
-    # Highlight nodes in the deadlock cycle
+    # Draw nodes
     if deadlock_cycle:
         deadlock_nodes = set(deadlock_cycle)
         nx.draw_networkx_nodes(G_rag, pos_rag, nodelist=[n for n in processes if n not in deadlock_nodes], 
@@ -191,7 +212,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
                                node_color='#90ee90', node_size=400, 
                                edgecolors='black', linewidths=0.5, ax=ax1)
 
-    # Draw resource nodes (rectangles with a dot)
+    # Draw resource nodes with rectangles
     for resource in resources:
         x, y = pos_rag[resource]
         rect = Rectangle((x - 0.08, y - 0.08), 0.16, 0.16, 
@@ -204,7 +225,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
     allocation_edges = [(u, v) for u, v in G_rag.edges if u.startswith("R") and v.startswith("P")]
     request_edges = [(u, v) for u, v in G_rag.edges if u.startswith("P") and v.startswith("R")]
 
-    # Highlight deadlock edges in RAG
+    # Highlight deadlock edges
     deadlock_edges_rag = []
     if deadlock_cycle:
         for i in range(len(deadlock_cycle) - 1):
@@ -227,7 +248,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
         nx.draw_networkx_edges(G_rag, pos_rag, edgelist=request_edges, edge_color='black', 
                                width=1.2, arrows=True, arrowstyle='->', arrowsize=10, ax=ax1)
 
-    # Add labels beside RAG edges with better positioning
+    # Add edge labels
     for edge in allocation_edges:
         u, v = edge
         x1, y1 = pos_rag[u]
@@ -246,7 +267,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
         label_color = 'red' if (u, v) in deadlock_edges_rag else 'black'
         ax1.text(label_x, label_y, "R", fontsize=8, color=label_color, ha='left', va='center')
 
-    # Draw labels outside nodes for RAG
+    # Draw node labels
     label_pos_rag = pos_rag.copy()
     for node in label_pos_rag:
         x, y = label_pos_rag[node]
@@ -256,14 +277,13 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
             label_pos_rag[node] = (x + 0.15, y)
     nx.draw_networkx_labels(G_rag, label_pos_rag, font_size=10, font_weight='bold', ax=ax1)
 
-    # Set title for RAG
     ax1.set_title("Resource Allocation Graph", fontsize=14, pad=15, fontweight='bold')
     ax1.axis('off')
 
     # --- WFG (Right Subplot) ---
     pos_wfg = nx.circular_layout(G_wfg, scale=1.0)
 
-    # Draw process nodes for WFG
+    # Draw nodes
     if wfg_deadlock_cycle:
         deadlock_nodes = set(wfg_deadlock_cycle)
         nx.draw_networkx_nodes(G_wfg, pos_wfg, nodelist=[n for n in G_wfg.nodes if n not in deadlock_nodes], 
@@ -277,7 +297,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
                                node_color='#add8e6', node_size=600, 
                                edgecolors='black', linewidths=0.5, ax=ax2)
 
-    # Draw edges for WFG
+    # Draw edges
     deadlock_edges = []
     if wfg_deadlock_cycle:
         deadlock_edges = [(wfg_deadlock_cycle[i], wfg_deadlock_cycle[i + 1]) for i in range(len(wfg_deadlock_cycle) - 1)]
@@ -293,7 +313,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
                                width=1.2, arrows=True, arrowstyle='->', arrowsize=10, 
                                connectionstyle='arc3,rad=0.1', ax=ax2)
 
-    # Add labels beside WFG edges
+    # Add edge labels
     for edge in G_wfg.edges:
         u, v = edge
         x1, y1 = pos_wfg[u]
@@ -308,7 +328,7 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
         label_color = 'red' if edge in deadlock_edges else 'black'
         ax2.text(label_x, label_y, "W", fontsize=8, color=label_color, ha='center', va='center')
 
-    # Draw labels outside nodes for WFG with dynamic positioning
+    # Draw node labels
     label_pos_wfg = pos_wfg.copy()
     for node in label_pos_wfg:
         x, y = label_pos_wfg[node]
@@ -317,11 +337,10 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
         label_pos_wfg[node] = (x + offset * np.cos(angle), y + offset * np.sin(angle))
     nx.draw_networkx_labels(G_wfg, label_pos_wfg, font_size=10, font_weight='bold', ax=ax2)
 
-    # Set title for WFG
     ax2.set_title("Wait-For Graph", fontsize=14, pad=15, fontweight='bold')
     ax2.axis('off')
 
-    # Custom legend with improved styling
+    # Legend
     legend_elements = [
         Line2D([0], [0], marker='o', color='w', label='Process', markerfacecolor='#add8e6', markersize=10),
         Line2D([0], [0], marker='s', color='w', label='Resource', markerfacecolor='#90ee90', markersize=10),
@@ -332,57 +351,42 @@ def visualize_rag(rag, resources_held, resources_wanted, deadlock_cycle=None):
         legend_elements.append(Line2D([0], [0], color='red', lw=1.5, label='Deadlock Cycle'))
     fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.98), 
                fontsize=9, title="Legend", title_fontsize=11, frameon=True, 
-               edgecolor='black', framealpha=1, ncol=len(legend_elements), 
-               columnspacing=1.0, handletextpad=0.4)
+               edgecolor='black', framealpha=1, ncol=len(legend_elements))
 
-    # Add text for deadlock or safe sequence
-    safe_sequence = compute_safe_sequence(processes, resources_held, resources_wanted)
-    y_position = 0.12  # Starting y-position for text
+    # Compute and display safe sequence or deadlock info
+    processes = list(resources_held.keys())
+    safe_sequence = compute_safe_sequence(processes, resources_held, resources_wanted, total_resources)
+    y_position = 0.12
     if safe_sequence:
         sequence_text = "Safe Execution Sequence: " + " -> ".join(safe_sequence)
         plt.figtext(0.5, y_position, sequence_text, ha="center", fontsize=10, color='green', weight='bold', 
                     bbox=dict(facecolor='white', edgecolor='green', boxstyle='round,pad=0.3'))
     else:
-        # No safe sequence found
         plt.figtext(0.5, y_position, "No Safe Execution Sequence Found", ha="center", fontsize=10, color='orange', weight='bold', 
                     bbox=dict(facecolor='white', edgecolor='orange', boxstyle='round,pad=0.3'))
         y_position -= 0.04
-        # If there is a deadlock cycle, display it and the detailed information
         if wfg_deadlock_cycle:
             cycle_text = "Deadlock Cycle: " + " -> ".join(wfg_deadlock_cycle)
-            involved_processes = sorted(set(wfg_deadlock_cycle[:-1]))  # Exclude the last node (repeated)
+            involved_processes = sorted(set(wfg_deadlock_cycle[:-1]))
             involved_text = f" (Processes Involved: {', '.join(involved_processes)})"
             plt.figtext(0.5, y_position, cycle_text + involved_text, ha="center", fontsize=10, color='red', weight='bold', 
                         bbox=dict(facecolor='white', edgecolor='red', boxstyle='round,pad=0.3'))
             y_position -= 0.04
-            # Add detailed deadlock information
             for i, detail in enumerate(deadlock_details):
                 plt.figtext(0.5, y_position - i * 0.04, detail, ha="center", fontsize=9, color='red', 
                             wrap=True, bbox=dict(facecolor='white', edgecolor='red', boxstyle='round,pad=0.3'))
 
-    # Adjust layout to accommodate additional text
     plt.tight_layout(rect=[0, 0.15, 1, 0.9])
     plt.show()
 
 if __name__ == "__main__":
-    # Example with deadlock (to match the image)
+    # Example with no deadlock
     sample_rag = {
         "P1": ["R1"],
-        "R1": ["P2"],
+        "R1": ["P1"],
         "P2": ["R2"],
-        "R2": ["P3"],
-        "P3": ["R3"],
-        "R3": ["P1"],
+        "R2": []
     }
-    sample_resources_held = {
-        "P1": ["R3"],
-        "P2": ["R1"],
-        "P3": ["R2"],
-    }
-    sample_resources_wanted = {
-        "P1": ["R1"],
-        "P2": ["R2"],
-        "P3": ["R3"],
-    }
-    sample_cycle = ["P1", "R1", "P2", "R2", "P3", "R3", "P1"]
-    visualize_rag(sample_rag, sample_resources_held, sample_resources_wanted, sample_cycle)
+    sample_resources_held = {"P1": ["R1"], "P2": []}
+    sample_resources_wanted = {"P1": [], "P2": ["R2"]}
+    visualize_rag(sample_rag, sample_resources_held, sample_resources_wanted, total_resources=2)

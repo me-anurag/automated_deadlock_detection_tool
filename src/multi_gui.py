@@ -3,7 +3,7 @@ from tkinter import ttk
 from tkinter import messagebox
 import time
 from multi_deadlock_algo import MultiInstanceDeadlockDetector
-from visualization import visualize_rag
+from multi_visualization import visualize_multi_rag  # Import the new visualization
 
 class MultiInstanceDeadlockGUI:
     """A GUI for detecting deadlocks in a system with multi-instance resources.
@@ -53,6 +53,7 @@ class MultiInstanceDeadlockGUI:
         self.available = {}
         self.total_resources = {}
         self.tooltips = []
+        self.last_detector = None  # Store the last detector for visualization
 
         # Bind window resize
         self.window.bind("<Configure>", self.on_window_resize)
@@ -367,7 +368,7 @@ class MultiInstanceDeadlockGUI:
             has_deadlock, message = detector.detect_deadlock()
             elapsed_time = time.time() - start_time
             message += f"\nDetection took {elapsed_time:.3f} seconds."
-            self.last_detector = detector
+            self.last_detector = detector  # Store the detector for visualization
             if has_deadlock:
                 self.sound_manager.play_deadlock_sound()
                 messagebox.showwarning("Unsafe State Detected", message, parent=self.input_window)
@@ -377,12 +378,21 @@ class MultiInstanceDeadlockGUI:
             messagebox.showerror("Error", str(e), parent=self.input_window)
 
     def visualize_rag(self):
-        """Visualizes the RAG (reusing existing visualization)."""
+        """Visualizes the RAG for a multi-instance system."""
         try:
             self._collect_data()
-            detector = MultiInstanceDeadlockDetector(self.allocation, self.max_matrix, self.available, self.total_resources)
+            if self.last_detector is None:
+                detector = MultiInstanceDeadlockDetector(self.allocation, self.max_matrix, self.available, self.total_resources)
+                has_deadlock, _ = detector.detect_deadlock()
+                self.last_detector = detector
+            else:
+                detector = self.last_detector
+
             rag = self._build_rag(detector.get_need())
-            visualize_rag(rag, self._flatten_allocation(), detector.get_need())
+            flat_allocation = self._flatten_allocation()
+            need = detector.get_need()
+            safe_sequence = detector.safe_sequence if not detector.has_deadlock else []
+            visualize_multi_rag(rag, flat_allocation, need, safe_sequence)
         except ValueError as e:
             messagebox.showerror("Error", str(e), parent=self.input_window)
 
@@ -409,6 +419,7 @@ class MultiInstanceDeadlockGUI:
         self.max_matrix.clear()
         self.available.clear()
         self.total_resources.clear()
+        self.last_detector = None
 
     def _collect_data(self):
         """Collects data from input fields, treating empty fields as 0."""
@@ -436,21 +447,38 @@ class MultiInstanceDeadlockGUI:
         self.available = {r: self.total_resources[r] - total_allocated[r] for r in self.total_resources}
 
     def _build_rag(self, need):
-        """Builds a simplified RAG for visualization using the Need matrix."""
+        """Builds the RAG for visualization (multi-instance)."""
         rag = {}
-        for p in self.allocation:
-            rag[p] = [r for r in need[p] if need[p][r] > 0]
-        for p in self.allocation:
-            for r in self.allocation[p]:
-                if self.allocation[p][r] > 0:
-                    if r not in rag:
-                        rag[r] = []
+        processes = list(self.allocation.keys())
+        resources = list(self.total_resources.keys())
+
+        # Initialize nodes
+        for p in processes:
+            rag[p] = []
+        for r in resources:
+            rag[r] = []
+
+        # Add request edges (Process -> Resource) based on Need
+        for p in processes:
+            for r in resources:
+                if need[p][r] > 0:  # Process needs this resource
+                    rag[p].append(r)
+
+        # Add allocation edges (Resource -> Process) based on Allocation
+        for p in processes:
+            for r in resources:
+                if self.allocation[p][r] > 0:  # Resource is allocated to this process
                     rag[r].append(p)
+
         return rag
 
     def _flatten_allocation(self):
-        """Flattens multi-instance allocation to single-instance-like format for visualization."""
+        """Flattens multi-instance allocation to a list of resources for visualization."""
         flat_allocation = {}
         for p in self.allocation:
-            flat_allocation[p] = [r for r in self.allocation[p] if self.allocation[p][r] > 0]
+            flat_allocation[p] = []
+            for r in self.allocation[p]:
+                # Add the resource to the list as many times as the number of instances allocated
+                instances = self.allocation[p][r]
+                flat_allocation[p].extend([r] * instances)
         return flat_allocation

@@ -1,92 +1,91 @@
 class MultiInstanceDeadlockDetector:
-    """A class to detect deadlocks in a system with multi-instance resources using the Banker's Algorithm.
+    """A class to detect deadlocks in a multi-instance resource system using the Banker's Algorithm.
 
     Args:
-        allocation (dict): A dictionary mapping processes to their allocated resources (e.g., {'P1': {'R1': 1, 'R2': 0}}).
-        max_matrix (dict): A dictionary mapping processes to their maximum resource needs.
-        available (dict): A dictionary of available resource instances (e.g., {'R1': 1, 'R2': 2}).
-        total_resources (dict): A dictionary of total resource instances (e.g., {'R1': 3, 'R2': 2}).
-
-    Raises:
-        ValueError: If the input data is invalid (e.g., negative values, exceeding total resources).
+        allocation (dict): Dict of process -> resource -> allocated instances.
+        max_matrix (dict): Dict of process -> resource -> maximum required instances.
+        available (dict): Dict of resource -> available instances.
+        total_resources (dict): Dict of resource -> total instances in the system.
     """
     def __init__(self, allocation, max_matrix, available, total_resources):
         self.allocation = allocation
         self.max_matrix = max_matrix
-        self.available = available
+        self.available = available.copy()  # Make a copy to avoid modifying the original
         self.total_resources = total_resources
         self.processes = list(allocation.keys())
-        self._validate_input()
-        self.need = self._compute_need()
+        self.resources = list(total_resources.keys())
+        self.has_deadlock = False
+        self.safe_sequence = []
 
-    def _validate_input(self):
-        """Validates the input data for consistency and correctness."""
-        for p in self.processes:
-            if not p.startswith("P"):
-                raise ValueError(f"Invalid process name: {p}")
-            for r in self.allocation[p]:
-                if not r.startswith("R"):
-                    raise ValueError(f"Invalid resource name: {r} in allocation for {p}")
-                if self.allocation[p][r] < 0 or self.max_matrix[p][r] < 0:
-                    raise ValueError(f"Negative values not allowed in allocation or max for {p}, {r}")
-                if self.allocation[p][r] > self.max_matrix[p][r]:
-                    raise ValueError(f"Allocation exceeds max for {p}, {r}")
-                if self.max_matrix[p][r] > self.total_resources[r]:
-                    raise ValueError(f"Max for {r} by {p} exceeds total instances")
-        for r in self.available:
-            if not r.startswith("R"):
-                raise ValueError(f"Invalid resource name: {r} in available")
-            if self.available[r] < 0:
-                raise ValueError(f"Negative available instances for {r}")
-            total_allocated = sum(self.allocation[p].get(r, 0) for p in self.processes)
-            if total_allocated + self.available[r] != self.total_resources[r]:
-                raise ValueError(f"Inconsistent total for {r}: allocated + available != total")
+    def get_need(self):
+        """Computes the Need matrix (Max - Allocation).
 
-    def _compute_need(self):
-        """Computes the Need matrix: Need[i][j] = Max[i][j] - Allocation[i][j]."""
+        Returns:
+            dict: Dict of process -> resource -> needed instances.
+        """
         need = {}
         for p in self.processes:
             need[p] = {}
-            for r in self.allocation[p]:
-                need[p][r] = self.max_matrix[p][r] - self.allocation[p][r]
+            for r in self.resources:
+                max_val = self.max_matrix[p].get(r, 0)
+                alloc_val = self.allocation[p].get(r, 0)
+                need_val = max_val - alloc_val
+                if need_val < 0:
+                    raise ValueError(f"Invalid data: Allocation ({alloc_val}) exceeds Max ({max_val}) for {p} and {r}")
+                need[p][r] = need_val
         return need
 
-    def is_safe(self):
-        """Checks if the system is in a safe state using the Banker's Algorithm.
+    def can_process_run(self, process, need, available):
+        """Checks if a process can run with the current available resources.
+
+        Args:
+            process (str): The process to check.
+            need (dict): The Need matrix.
+            available (dict): The current available resources.
 
         Returns:
-            tuple: (bool, str) where bool indicates if a safe state exists, and str is the safe sequence or error message.
+            bool: True if the process can run, False otherwise.
         """
-        work = self.available.copy()
-        finish = {p: False for p in self.processes}
-        safe_sequence = []
-
-        while len(safe_sequence) < len(self.processes):
-            found = False
-            for p in self.processes:
-                if not finish[p]:
-                    can_run = all(self.need[p].get(r, 0) <= work.get(r, 0) for r in self.total_resources)
-                    if can_run:
-                        safe_sequence.append(p)
-                        for r in self.allocation[p]:
-                            work[r] = work.get(r, 0) + self.allocation[p][r]
-                        finish[p] = True
-                        found = True
-            if not found:
-                return False, "No safe sequence found. System may be in an unsafe state or deadlocked."
-        return True, f"Safe sequence: {safe_sequence}"
+        for r in self.resources:
+            if need[process][r] > available[r]:
+                return False
+        return True
 
     def detect_deadlock(self):
-        """Detects if the system is deadlocked or unsafe.
+        """Detects if the system is in a deadlock or unsafe state using the Banker's Algorithm.
 
         Returns:
-            tuple: (bool, str) where bool indicates if a deadlock/unsafe state exists, and str is a message.
+            tuple: (bool, str) where bool is True if there's a deadlock/unsafe state, and str is the message.
         """
-        if not self.allocation or not self.max_matrix:
-            return False, "Please provide allocation and max data before detecting deadlock."
-        safe, message = self.is_safe()
-        return not safe, message
+        # Compute Need matrix
+        need = self.get_need()
 
-    def get_need(self):
-        """Returns the computed Need matrix."""
-        return self.need
+        # Initialize work (available resources) and finish flags
+        work = self.available.copy()
+        finish = {p: False for p in self.processes}
+        self.safe_sequence = []
+
+        # Find a safe sequence
+        while len(self.safe_sequence) < len(self.processes):
+            found = False
+            for p in self.processes:
+                if not finish[p] and self.can_process_run(p, need, work):
+                    # Simulate running the process
+                    for r in self.resources:
+                        work[r] += self.allocation[p].get(r, 0)
+                    finish[p] = True
+                    self.safe_sequence.append(p)
+                    found = True
+                    break
+            if not found:
+                # No process can run
+                break
+
+        # Check if all processes finished
+        if len(self.safe_sequence) == len(self.processes):
+            self.has_deadlock = False
+            return False, f"Safe sequence: {self.safe_sequence}"
+        else:
+            self.has_deadlock = True
+            unfinished = [p for p in self.processes if not finish[p]]
+            return True, f"No safe sequence found. System MAY be in an unsafe state or deadlocked. Unfinished processes: {unfinished}"

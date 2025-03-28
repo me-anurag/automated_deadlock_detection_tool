@@ -371,9 +371,9 @@ class DeadlockDetectionGUI:
         detector = DeadlockDetector(self.resources_held, self.resources_wanted, self.total_resources)
         rag = detector.build_rag()
         if hasattr(self, "last_detector") and self.last_detector.cycle:
-            visualize_rag(rag, self.resources_held, self.resources_wanted, self.last_detector.cycle)
+            visualize_rag(rag, self.resources_held, self.resources_wanted, self.last_detector.cycle, self.total_resources)
         else:
-            visualize_rag(rag, self.resources_held, self.resources_wanted)
+            visualize_rag(rag, self.resources_held, self.resources_wanted, total_resources=self.total_resources)
 
     def detect_deadlock(self):
         """Detects a deadlock and displays the result, including performance metrics."""
