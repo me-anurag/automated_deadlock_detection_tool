@@ -1,6 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch
+from matplotlib.patches import Rectangle
 
 def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
     """Visualizes the Resource Allocation Graph (RAG) for a multi-instance system.
@@ -11,19 +11,9 @@ def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
         need (dict): Need matrix for determining request edges.
         safe_sequence (list, optional): The safe sequence determined by the deadlock detector.
     """
-    print("Visualizing RAG...")  # Debug print
-    print("RAG:", rag)
-    print("Flat Allocation:", flat_allocation)
-    print("Need:", need)
-    print("Safe Sequence:", safe_sequence)
-
-    # Create RAG
     G_rag = nx.DiGraph()
     processes = [node for node in rag if node.startswith("P")]
     resources = [node for node in rag if node.startswith("R")]
-
-    print("Processes:", processes)
-    print("Resources:", resources)
 
     # Add nodes
     for p in processes:
@@ -31,7 +21,7 @@ def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
     for r in resources:
         G_rag.add_node(r, type="resource")
 
-    # Add edges for RAG with instance counts
+    # Add edges with instance counts
     for p in processes:
         for r in rag[p]:  # Request edges (P -> R)
             instances_needed = need[p][r]
@@ -43,79 +33,69 @@ def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
             if instances_allocated > 0:
                 G_rag.add_edge(r, p, type="allocation", instances=instances_allocated)
 
-    # Determine status based on safe sequence
-    if safe_sequence:
+    # Determine status
+    if safe_sequence and len(safe_sequence) > 0:
         status = f"Safe Sequence: {safe_sequence}"
         status_color = "green"
     else:
         status = "No Safe Execution Sequence Found"
-        status_color = "orange"
+        status_color = "red"
 
     # Visualization
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(10, 8))
+    pos = {}
 
-    # RAG Visualization
-    pos_rag = {}
-    for i, r in enumerate(resources):
-        pos_rag[r] = (i * 0.5, 1)  # Resources at the top
+    # Position processes (circles) at the bottom
     for i, p in enumerate(processes):
-        pos_rag[p] = (i * 0.5, 0)  # Processes at the bottom
+        pos[p] = (i * 1.5, 0)
 
-    node_colors_rag = []
-    for node in G_rag.nodes():
-        if G_rag.nodes[node]["type"] == "process":
-            node_colors_rag.append("lightblue")
-        else:
-            node_colors_rag.append("lightgreen")
+    # Position resources (rectangles) at the top
+    for i, r in enumerate(resources):
+        pos[r] = (i * 1.5, 2)
 
-    nx.draw_networkx_nodes(G_rag, pos_rag, node_color=node_colors_rag, node_size=500, ax=ax)
-    nx.draw_networkx_labels(G_rag, pos_rag, ax=ax)
+    # Draw process nodes (circles)
+    process_nodes = [n for n in G_rag.nodes() if G_rag.nodes[n]["type"] == "process"]
+    nx.draw_networkx_nodes(G_rag, pos, nodelist=process_nodes, node_shape='o', node_color="lightblue", 
+                           node_size=800, ax=ax)
 
+    # Draw resource nodes (rectangles) with dots
+    resource_nodes = [n for n in G_rag.nodes() if G_rag.nodes[n]["type"] == "resource"]
+    for r in resource_nodes:
+        x, y = pos[r]
+        # Draw rectangle
+        rect = Rectangle((x - 0.4, y - 0.2), 0.8, 0.4, fill=True, color="lightgreen", ec="black")
+        ax.add_patch(rect)
+        # Add dots based on total instances (assuming total instances are in rag[r] length or need to be passed)
+        total_instances = max([need[p][r] + flat_allocation[p].count(r) for p in processes])  # Estimate total
+        for dot in range(min(total_instances, 5)):  # Limit to 5 dots for visibility
+            ax.plot(x - 0.3 + (dot * 0.15), y, 'o', color="black", markersize=5)
+
+    # Draw edges
     for edge in G_rag.edges(data=True):
         src, dst, data = edge
         instances = data["instances"]
         if data["type"] == "request":
-            arrow = FancyArrowPatch(
-                (pos_rag[src][0], pos_rag[src][1]),
-                (pos_rag[dst][0], pos_rag[dst][1]),
-                arrowstyle="->",
-                color="black",
-                mutation_scale=15,
-                label=f"R({instances})"
-            )
-            ax.add_patch(arrow)
-            ax.text(
-                (pos_rag[src][0] + pos_rag[dst][0]) / 2,
-                (pos_rag[src][1] + pos_rag[dst][1]) / 2,
-                f"R({instances})",
-                fontsize=10,
-                color="black"
-            )
+            # Request edge: solid arrow
+            ax.annotate("", xy=pos[dst], xytext=pos[src], 
+                        arrowprops=dict(arrowstyle="->", color="red", lw=2))
+            ax.text((pos[src][0] + pos[dst][0]) / 2, (pos[src][1] + pos[dst][1]) / 2 + 0.1,
+                    f"R({instances})", fontsize=10, color="red", ha="center")
         else:
-            arrow = FancyArrowPatch(
-                (pos_rag[src][0], pos_rag[src][1]),
-                (pos_rag[dst][0], pos_rag[dst][1]),
-                arrowstyle="->",
-                color="black",
-                mutation_scale=15,
-                label=f"H({instances})"
-            )
-            ax.add_patch(arrow)
-            ax.text(
-                (pos_rag[src][0] + pos_rag[dst][0]) / 2,
-                (pos_rag[src][1] + pos_rag[dst][1]) / 2,
-                f"H({instances})",
-                fontsize=10,
-                color="black"
-            )
+            # Allocation edge: dashed arrow
+            ax.annotate("", xy=pos[dst], xytext=pos[src], 
+                        arrowprops=dict(arrowstyle="->", color="blue", lw=2, linestyle="--"))
+            ax.text((pos[src][0] + pos[dst][0]) / 2, (pos[src][1] + pos[dst][1]) / 2 - 0.1,
+                    f"H({instances})", fontsize=10, color="blue", ha="center")
 
-    ax.set_title("Resource Allocation Graph (Multi-Instance)")
+    # Draw labels
+    nx.draw_networkx_labels(G_rag, pos, font_size=12, ax=ax)
+
+    # Set title and legend
+    ax.set_title("Multi-Instance Resource Allocation Graph", pad=20)
     ax.axis("off")
-
-    # Add legend
-    plt.figtext(0.5, 0.95, "Legend", ha="center", fontsize=12, fontweight="bold")
-    plt.figtext(0.5, 0.92, "Process  Resource  Held (H)  Request (R)", ha="center", fontsize=10)
-    plt.figtext(0.5, 0.89, status, ha="center", fontsize=10, color=status_color)
+    plt.figtext(0.5, 0.95, "Legend: Circles = Processes, Rectangles = Resources", ha="center", fontsize=10)
+    plt.figtext(0.5, 0.92, "Red Solid Arrow = Request (R), Blue Dashed Arrow = Held (H)", ha="center", fontsize=10)
+    plt.figtext(0.5, 0.89, status, ha="center", fontsize=12, color=status_color)
 
     plt.tight_layout(rect=[0, 0, 1, 0.88])
     plt.show()

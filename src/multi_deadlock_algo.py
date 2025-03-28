@@ -35,19 +35,19 @@ class MultiInstanceDeadlockDetector:
                 need[p][r] = need_val
         return need
 
-    def can_process_run(self, process, need, available):
+    def can_process_run(self, process, need, work):
         """Checks if a process can run with the current available resources.
 
         Args:
             process (str): The process to check.
             need (dict): The Need matrix.
-            available (dict): The current available resources.
+            work (dict): The current available resources.
 
         Returns:
             bool: True if the process can run, False otherwise.
         """
         for r in self.resources:
-            if need[process][r] > available[r]:
+            if need[process][r] > work[r]:
                 return False
         return True
 
@@ -57,31 +57,28 @@ class MultiInstanceDeadlockDetector:
         Returns:
             tuple: (bool, str) where bool is True if there's a deadlock/unsafe state, and str is the message.
         """
-        # Compute Need matrix
         need = self.get_need()
-
-        # Initialize work (available resources) and finish flags
         work = self.available.copy()
         finish = {p: False for p in self.processes}
         self.safe_sequence = []
 
-        # Find a safe sequence
-        while len(self.safe_sequence) < len(self.processes):
+        remaining_processes = self.processes.copy()
+        while remaining_processes:
             found = False
-            for p in self.processes:
+            for p in remaining_processes[:]:  # Copy to avoid modifying during iteration
                 if not finish[p] and self.can_process_run(p, need, work):
-                    # Simulate running the process
+                    # Simulate running the process by releasing its allocated resources
                     for r in self.resources:
                         work[r] += self.allocation[p].get(r, 0)
                     finish[p] = True
                     self.safe_sequence.append(p)
+                    remaining_processes.remove(p)
                     found = True
                     break
             if not found:
-                # No process can run
+                # No process can run with current resources
                 break
 
-        # Check if all processes finished
         if len(self.safe_sequence) == len(self.processes):
             self.has_deadlock = False
             return False, f"Safe sequence: {self.safe_sequence}"
