@@ -749,5 +749,8 @@ class DeadlockDetectionGUI:
         messagebox.showinfo("Done", "All phases completed. Check the console for details.", parent=self.new_window)
 
     def open_multi_window(self):
-        """Placeholder for multi-instance detection window."""
-        print("Opening Multi-Instance Detection...")
+        from multi_gui import MultiInstanceDeadlockGUI  # Import here to avoid circular imports
+        self.new_window = tk.Toplevel(self.window)
+        self.new_window.title("Multi-Instance Detection")
+        app = MultiInstanceDeadlockGUI(self.new_window, self.sound_manager)
+        self.new_window.grab_set()
