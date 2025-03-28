@@ -2,7 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
+def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None, unfinished_processes=None):
     """Visualizes the Resource Allocation Graph (RAG) for a multi-instance system.
 
     Args:
@@ -10,6 +10,7 @@ def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
         flat_allocation (dict): Flattened allocation matrix for visualization.
         need (dict): Need matrix for determining request edges.
         safe_sequence (list, optional): The safe sequence determined by the deadlock detector.
+        unfinished_processes (list, optional): List of processes that couldn't finish (involved in deadlock).
     """
     G_rag = nx.DiGraph()
     processes = [node for node in rag if node.startswith("P")]
@@ -40,6 +41,9 @@ def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
     else:
         status = "No Safe Execution Sequence Found"
         status_color = "red"
+        if unfinished_processes:
+            status = f"Deadlock Found: Processes Involved: {unfinished_processes}"
+            status_color = "red"
 
     # Visualization
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -65,9 +69,9 @@ def visualize_multi_rag(rag, flat_allocation, need, safe_sequence=None):
         # Draw rectangle
         rect = Rectangle((x - 0.4, y - 0.2), 0.8, 0.4, fill=True, color="lightgreen", ec="black")
         ax.add_patch(rect)
-        # Add dots based on total instances (assuming total instances are in rag[r] length or need to be passed)
-        total_instances = max([need[p][r] + flat_allocation[p].count(r) for p in processes])  # Estimate total
-        for dot in range(min(total_instances, 5)):  # Limit to 5 dots for visibility
+        # Add dots based on total instances
+        total_instances = max([need[p][r] + flat_allocation[p].count(r) for p in processes])
+        for dot in range(min(total_instances, 5)):
             ax.plot(x - 0.3 + (dot * 0.15), y, 'o', color="black", markersize=5)
 
     # Draw edges

@@ -17,8 +17,9 @@ class SoundManager:
         allocate_sound_path (str): Path to the sound file for allocation events.
         request_sound_path (str): Path to the sound file for request events.
         deadlock_sound_path (str): Path to the sound file for deadlock detection events.
+        safe_sound_path (str): Path to the sound file for safe state (no deadlock) events.
     """
-    def __init__(self, allocate_sound_path, request_sound_path, deadlock_sound_path):
+    def __init__(self, allocate_sound_path, request_sound_path, deadlock_sound_path, safe_sound_path="assets/safe_sound.wav"):
         self.sound_enabled = False  # Start as False, set to True only if all succeeds
         self.sounds_loaded = False
         try:
@@ -38,9 +39,11 @@ class SoundManager:
             print(f"Loaded request sound: {request_sound_path}")
             self.deadlock_sound = pygame.mixer.Sound(deadlock_sound_path)
             print(f"Loaded deadlock sound: {deadlock_sound_path}")
+            self.safe_sound = pygame.mixer.Sound(safe_sound_path)
+            print(f"Loaded safe state sound: {safe_sound_path}")
             self.sounds_loaded = True
             self.sound_enabled = True  # Enable only if all sounds load
-            logging.info(f"Sounds loaded successfully: allocate={allocate_sound_path}, request={request_sound_path}, deadlock={deadlock_sound_path}")
+            logging.info(f"Sounds loaded successfully: allocate={allocate_sound_path}, request={request_sound_path}, deadlock={deadlock_sound_path}, safe={safe_sound_path}")
         except Exception as e:
             error_msg = f"Error loading sounds: {e}"
             logging.error(error_msg)
@@ -82,3 +85,9 @@ class SoundManager:
         print(f"Attempting to play deadlock sound: enabled={self.sound_enabled}, sound={self.deadlock_sound}")
         if self.sound_enabled and self.deadlock_sound:
             self.deadlock_sound.play()
+
+    def play_safe_sound(self):
+        """Plays the sound for a safe state (no deadlock) event."""
+        print(f"Attempting to play safe state sound: enabled={self.sound_enabled}, sound={self.safe_sound}")
+        if self.sound_enabled and self.safe_sound:
+            self.safe_sound.play()

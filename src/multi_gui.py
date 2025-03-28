@@ -373,6 +373,7 @@ class MultiInstanceDeadlockGUI:
                 self.sound_manager.play_deadlock_sound()
                 messagebox.showwarning("Unsafe State Detected", message, parent=self.input_window)
             else:
+                self.sound_manager.play_safe_sound()  # Play sound for safe state
                 messagebox.showinfo("Safe State", message, parent=self.input_window)
         except ValueError as e:
             messagebox.showerror("Error", str(e), parent=self.input_window)
